@@ -3,64 +3,53 @@ import pandas as pd
 import numpy as np
 import joblib
 
-MODEL_PATH = "svm_heart_model.pkl"   # your saved model file
+MODEL_PATH = "svm_heart_model.pkl"  # your trained model file
 
 st.set_page_config(page_title="Heart Failure Prediction", layout="centered")
-
 st.title("❤️ Heart Failure Prediction using SVM")
-st.write("Enter patient features or upload CSV to predict heart failure risk.")
 
-# Load model
 @st.cache_resource
 def load_model():
-    try:
-        model_bundle = joblib.load(MODEL_PATH)
-        return model_bundle["model"], model_bundle["feature_cols"], model_bundle["label_encoder"]
-    except:
-        st.error("Model file not found! Upload svm_heart_model.pkl to your GitHub repo.")
-        st.stop()
+    model_bundle = joblib.load(MODEL_PATH)
+    return model_bundle["model"], model_bundle["feature_cols"]
 
-model, feature_cols, label_encoder = load_model()
+try:
+    model, feature_cols = load_model()
+except Exception as e:
+    st.error(f"Model file not found. Upload svm_heart_model.pkl. Error: {e}")
+    st.stop()
 
-# Sidebar
-st.sidebar.header("Choose Input Mode")
-mode = st.sidebar.radio("Select:", ["Manual Input", "Upload CSV File"])
+st.sidebar.header("Choose Input Method")
+mode = st.sidebar.radio("Select Input Method:", ["Manual Input", "Upload CSV"])
 
-# --------------------------------------------------------
-# MANUAL INPUT MODE
-# --------------------------------------------------------
+# ---------------------------- MANUAL INPUT ----------------------------------
 if mode == "Manual Input":
-    st.subheader("Enter Patient Data")
+    st.subheader("Enter Patient Details")
 
-    inputs = []
+    inputs = {}
     for col in feature_cols:
-        value = st.number_input(f"{col}", min_value=0.0, max_value=300.0, value=1.0)
-        inputs.append(value)
+        inputs[col] = st.number_input(col, min_value=0.0, value=0.0)
 
     if st.button("Predict"):
-        X = np.array(inputs).reshape(1, -1)
+        X = np.array([list(inputs.values())])
         pred = model.predict(X)[0]
-        pred_label = label_encoder.inverse_transform([pred])[0]
+        st.success(f"Predicted Outcome: **{pred}**")
 
-        st.success(f"Prediction: **{pred_label}**")
-
-# --------------------------------------------------------
-# CSV UPLOAD MODE
-# --------------------------------------------------------
+# ---------------------------- CSV UPLOAD ------------------------------------
 else:
-    st.subheader("Upload CSV File for Multiple Predictions")
+    st.subheader("Upload CSV File for Batch Predictions")
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 
-    uploaded = st.file_uploader("Upload CSV", type=["csv"])
-    if uploaded:
-        df = pd.read_csv(uploaded)
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
 
         missing = [c for c in feature_cols if c not in df.columns]
         if missing:
             st.error(f"Missing columns: {missing}")
         else:
             preds = model.predict(df[feature_cols])
-            preds_labels = label_encoder.inverse_transform(preds)
-            df["Prediction"] = preds_labels
+            df["Predicted"] = preds
+            st.dataframe(df)
 
-            st.write(df.head())
-            st.download_button("Download Predictions", df.to_csv(index=False), "predictions.csv")
+            csv_data = df.to_csv(index=False).encode("utf-8")
+            st.download_button("Download Predictions", csv_data, "predictions.csv")
