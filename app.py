@@ -3,53 +3,64 @@ import pandas as pd
 import numpy as np
 import joblib
 
-MODEL_FILE = "svm_iris_model.pkl"
+MODEL_PATH = "svm_heart_model.pkl"   # your saved model file
 
 st.set_page_config(page_title="Heart Failure Prediction", layout="centered")
-st.title("❤️ Heart Failure Prediction using SVM")
-st.write("Upload patient data or manually enter values to get prediction.")
 
+st.title("❤️ Heart Failure Prediction using SVM")
+st.write("Enter patient features or upload CSV to predict heart failure risk.")
+
+# Load model
 @st.cache_resource
 def load_model():
-    return joblib.load(MODEL_FILE)
+    try:
+        model_bundle = joblib.load(MODEL_PATH)
+        return model_bundle["model"], model_bundle["feature_cols"], model_bundle["label_encoder"]
+    except:
+        st.error("Model file not found! Upload svm_heart_model.pkl to your GitHub repo.")
+        st.stop()
 
-model = load_model()
+model, feature_cols, label_encoder = load_model()
 
-# Feature list from dataset
-features = [
-    'age','anaemia','creatinine_phosphokinase','diabetes','ejection_fraction',
-    'high_blood_pressure','platelets','serum_creatinine','serum_sodium','sex',
-    'smoking','time'
-]
+# Sidebar
+st.sidebar.header("Choose Input Mode")
+mode = st.sidebar.radio("Select:", ["Manual Input", "Upload CSV File"])
 
-st.sidebar.header("Choose Input Method")
-method = st.sidebar.radio("Input Method", ["Manual Entry", "Upload CSV"])
-if method == "Manual Entry":
-    inputs = {}
+# --------------------------------------------------------
+# MANUAL INPUT MODE
+# --------------------------------------------------------
+if mode == "Manual Input":
     st.subheader("Enter Patient Data")
-    for f in features:
-        inputs[f] = st.number_input(f, value=0.0)
 
-    if st.button("Predict Heart Failure"):
-        data = np.array(list(inputs.values())).reshape(1, -1)
-        pred = model.predict(data)[0]
-        result = "High Risk (1)" if pred == 1 else "Low Risk (0)"
-        st.success(f"Prediction: **{result}**")
+    inputs = []
+    for col in feature_cols:
+        value = st.number_input(f"{col}", min_value=0.0, max_value=300.0, value=1.0)
+        inputs.append(value)
+
+    if st.button("Predict"):
+        X = np.array(inputs).reshape(1, -1)
+        pred = model.predict(X)[0]
+        pred_label = label_encoder.inverse_transform([pred])[0]
+
+        st.success(f"Prediction: **{pred_label}**")
+
+# --------------------------------------------------------
+# CSV UPLOAD MODE
+# --------------------------------------------------------
 else:
-    st.subheader("Upload CSV for Batch Prediction")
-    uploaded = st.file_uploader("Upload CSV", type=['csv'])
+    st.subheader("Upload CSV File for Multiple Predictions")
 
+    uploaded = st.file_uploader("Upload CSV", type=["csv"])
     if uploaded:
         df = pd.read_csv(uploaded)
 
-        missing_cols = [col for col in features if col not in df.columns]
-        if missing_cols:
-            st.error(f"Missing columns: {missing_cols}")
+        missing = [c for c in feature_cols if c not in df.columns]
+        if missing:
+            st.error(f"Missing columns: {missing}")
         else:
-            preds = model.predict(df[features])
-            df["Prediction"] = preds
+            preds = model.predict(df[feature_cols])
+            preds_labels = label_encoder.inverse_transform(preds)
+            df["Prediction"] = preds_labels
+
             st.write(df.head())
-
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Predictions", csv, "predictions.csv")
-
+            st.download_button("Download Predictions", df.to_csv(index=False), "predictions.csv")
