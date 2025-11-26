@@ -1,0 +1,54 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+
+MODEL_FILE = "svm_iris_model.pkl"
+
+st.set_page_config(page_title="Heart Failure Prediction", layout="centered")
+st.title("❤️ Heart Failure Prediction using SVM")
+st.write("Upload patient data or manually enter values to get prediction.")
+
+@st.cache_resource
+def load_model():
+    return joblib.load(MODEL_FILE)
+
+model = load_model()
+
+# Feature list from dataset
+features = [
+    'age','anaemia','creatinine_phosphokinase','diabetes','ejection_fraction',
+    'high_blood_pressure','platelets','serum_creatinine','serum_sodium','sex',
+    'smoking','time'
+]
+
+st.sidebar.header("Choose Input Method")
+method = st.sidebar.radio("Input Method", ["Manual Entry", "Upload CSV"])
+if method == "Manual Entry":
+    inputs = {}
+    st.subheader("Enter Patient Data")
+    for f in features:
+        inputs[f] = st.number_input(f, value=0.0)
+
+    if st.button("Predict Heart Failure"):
+        data = np.array(list(inputs.values())).reshape(1, -1)
+        pred = model.predict(data)[0]
+        result = "High Risk (1)" if pred == 1 else "Low Risk (0)"
+        st.success(f"Prediction: **{result}**")
+else:
+    st.subheader("Upload CSV for Batch Prediction")
+    uploaded = st.file_uploader("Upload CSV", type=['csv'])
+
+    if uploaded:
+        df = pd.read_csv(uploaded)
+
+        missing_cols = [col for col in features if col not in df.columns]
+        if missing_cols:
+            st.error(f"Missing columns: {missing_cols}")
+        else:
+            preds = model.predict(df[features])
+            df["Prediction"] = preds
+            st.write(df.head())
+
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Predictions", csv, "predictions.csv")
